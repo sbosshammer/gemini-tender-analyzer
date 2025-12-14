@@ -2,6 +2,7 @@ import streamlit as st
 from google import genai
 import os
 import io
+import tempfile # <--- НОВЫЙ ИМПОРТ
 
 # --- Konfiguration des API-Clients ---
 # Единственный блок try/except для инициализации API
@@ -15,32 +16,41 @@ except Exception:
 
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
-    Lädt die Dokumente in die File API, analysiert sie mit Gemini 1.5 Pro und löscht sie.
+    Lädt die Dokumente, сохраняя их локально для правильного определения MIME-типа,
+    анализирует их с Gemini 1.5 Pro и затем удаляет.
     """
     uploaded_gemini_files = []
     
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien (Цикл без внешнего try/except)
+    # 1. Hochladen der Dateien (Метод временного файла для обхода ошибки MIME-типа)
     for uploaded_file in files:
+        temp_file = None
         try:
-            # 1. Считываем содержимое файла как байты
-            file_bytes = uploaded_file.getvalue()
+            # 1. Создание временного файла с правильным расширением
+            # Используется для того, чтобы Python мог сам определить MIME-тип по расширению
+            ext = uploaded_file.name.split('.')[-1]
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}')
             
-            # 2. Создаем объект BytesIO
-            byte_stream = io.BytesIO(file_bytes)
+            # 2. Запись содержимого Streamlit-файла во временный файл
+            temp_file.write(uploaded_file.getvalue())
+            temp_file.close()
             
-            # 3. Загружаем файл, ЯВНО указывая MIME-тип (самое надежное исправление для вашей версии API)
+            # 3. Загрузка файла в Gemini API по пути к файлу
+            # Этот метод позволяет библиотеке Python автоматически определить MIME-тип
             file = client.files.upload(
-                file=byte_stream,
-                mime_type=uploaded_file.type  # <-- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ MIME-типа
+                file=temp_file.name
             )
             
             uploaded_gemini_files.append(file)
             
         except Exception as e:
-            # Выводим ошибку для этого файла и продолжаем
             st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {type(e).__name__}: {e}")
+        
+        finally:
+            # 4. Очистка временного локального файла
+            if temp_file and os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
             
     
     if not uploaded_gemini_files:
@@ -117,7 +127,7 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 1. **Quellenbasis:** Verwende **ausschließlich** die beigefügten Dokumente.
 2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information **nicht explizit** vorhanden oder belegbar ist:
    → Gib in der Tabelle **"Keine Angabe"** aus.
-3. **Klarer Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
+3. **Клар Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
 4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
 5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt und **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
 
@@ -132,7 +142,7 @@ Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten 
 | Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
 | Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
 | Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
 | Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
 | Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
 | Referenzen | [Extrahierter Text или "Keine Angabe"] |
@@ -147,4 +157,11 @@ user_prompt = st.text_area(
 if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
     if not user_prompt:
         st.warning("Bitte geben Sie einen Prompt für die Analyse ein.")
-    else
+    else:
+        # Zeigt einen Lade-Spinner während der Verarbeitung
+        with st.spinner('Verarbeite Dokumente und analysiere mit Gemini 1.5 Pro...'):
+            result_text = analyze_tender(uploaded_files, user_prompt)
+
+            if result_text:
+                st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
+                st.markdown(result_text) # Zeigt die formatierte Markdown-Tabelle
