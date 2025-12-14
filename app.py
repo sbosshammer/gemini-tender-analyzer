@@ -90,8 +90,8 @@ uploaded_files = st.file_uploader(
 )
 
 # 2. Prompt-Eingabefeld
-default_prompt = (
-    "**Rolle:**
+default_prompt = """
+    **Rolle:**
 Du bist ein hochpräziser, streng regelbasierter KI-Assistent zur Analyse öffentlicher Ausschreibungsunterlagen. Deine Aufgabe ist es, **ausschließlich** die relevanten Daten aus den beigefügten Dokumenten zu extrahieren.
 
 **Ziel:**
@@ -132,8 +132,8 @@ Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten 
 | Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
 | Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
 | Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
-| Referenzen | [Extrahierter Text oder "Keine Angabe"] |"
-)
+| Referenzen | [Extrahierter Text oder "Keine Angabe"] |
+"""
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
     value=default_prompt, 
