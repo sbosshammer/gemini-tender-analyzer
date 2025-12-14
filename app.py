@@ -12,27 +12,30 @@ except Exception:
     st.error("Fehler bei der Initialisierung des Gemini API. Bitte prüfen Sie den 'GEMINI_API_KEY' in den Streamlit Secrets.")
     st.stop()
 
+
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
     Lädt die Dokumente in die File API, analysiert sie mit Gemini 1.5 Pro und löscht sie.
     """
     uploaded_gemini_files = []
     
-st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
+    st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
     # 1. Hochladen der Dateien in die Gemini File API
     try:
-        # Цикл имеет правильные отступы (4 пробела)
         for uploaded_file in files:
             
-            # Внутри цикла отступы 8 пробелов
+            # 1. Считываем содержимое файла как байты
             file_bytes = uploaded_file.getvalue()
             
+            # 2. Создаем объект BytesIO
             byte_stream = io.BytesIO(file_bytes)
             
-            # Присваиваем имя файла объекту BytesIO для определения MIME-типа
+            # 3. КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Присваиваем имя файла объекту BytesIO, 
+            #    чтобы API мог автоматически определить MIME-тип.
             byte_stream.name = uploaded_file.name 
             
+            # 4. Загружаем файл
             file = client.files.upload(
                 file=byte_stream
             )
@@ -43,15 +46,15 @@ st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
         # 2. Prompterstellung und Analyse
         full_prompt = f"""
-        AUSSCHREIBUNG: {tender_name}
-        
-        Bitte analysieren Sie ALLE beigefügten Dokumente dieser Ausschreibung. 
-        Ihre Aufgabe ist es: {user_prompt}
-        
-        Wichtig: 
-        1. Verwenden Sie NUR die hochgeladenen Dokumente als Quelle.
-        2. Extrahieren Sie nur präzise Daten und zitieren Sie bei Fakten die Quelle (Dateiname oder Dokumenttitel).
-        """
+AUSSCHREIBUNG: {tender_name}
+
+Bitte analysieren Sie ALLE beigefügten Dokumente dieser Ausschreibung. 
+Ihre Aufgabe ist es: {user_prompt}
+
+Wichtig: 
+1. Verwenden Sie NUR die hochgeladenen Dokumente als Quelle.
+2. Extrahieren Sie nur präzise Daten und zitieren Sie bei Fakten die Quelle (Dateiname oder Dokumenttitel).
+"""
         
         content = [full_prompt] + uploaded_gemini_files
         
@@ -63,14 +66,12 @@ st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
         return response.text
 
     except Exception as e:
-        # Улучшенное сообщение об ошибке для отладки
         st.error(f"Ein kritischer Fehler ist bei der Analyse aufgetreten: {type(e).__name__}: {e}")
         return None
         
     finally:
         # 3. Reinigung (КРИТИЧЕСКИЙ ИЗОЛЯЦИОННЫЙ ШАГ)
         st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
-        # Цикл имеет правильные отступы
         for file in uploaded_gemini_files:
             try:
                 client.files.delete(name=file.name)
