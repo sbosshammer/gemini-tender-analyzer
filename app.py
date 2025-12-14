@@ -4,7 +4,7 @@ import os
 import io
 
 # --- Konfiguration des API-Clients ---
-# Единственный блок try/except, который должен быть.
+# Единственный блок try/except для инициализации API
 try:
     API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
@@ -21,20 +21,26 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-   # 1. Hochladen der Dateien (Без try/except, чтобы убрать вложенность)
+    # 1. Hochladen der Dateien (Цикл без внешнего try/except)
     for uploaded_file in files:
         try:
-            # Просто передаем объект Streamlit FileUploader напрямую. 
-            # Он содержит и содержимое, и MIME-тип (.type)
+            # 1. Считываем содержимое файла как байты
+            file_bytes = uploaded_file.getvalue()
+            
+            # 2. Создаем объект BytesIO
+            byte_stream = io.BytesIO(file_bytes)
+            
+            # 3. Загружаем файл, ЯВНО указывая MIME-тип (самое надежное исправление для вашей версии API)
             file = client.files.upload(
-                file=uploaded_file
+                file=byte_stream,
+                mime_type=uploaded_file.type  # <-- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ MIME-типа
             )
             
             uploaded_gemini_files.append(file)
             
         except Exception as e:
-            # Если возникла ошибка загрузки, выводим её и продолжаем
-            st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {e}")
+            # Выводим ошибку для этого файла и продолжаем
+            st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {type(e).__name__}: {e}")
             
     
     if not uploaded_gemini_files:
@@ -64,7 +70,7 @@ Wichtig:
     
     result_text = response.text
 
-    # 3. Очистка (БЕЗ FINALLY, но с защитой от ошибок)
+    # 3. Очистка
     st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
     for file in uploaded_gemini_files:
         try:
@@ -117,7 +123,7 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 
 **Ausgabeformat (Zwingend):**
 
-Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium и Ergebnis), **ohne** JSON или Code-Blöcke.
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON или Code-Blöcke.
 
 | Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
 | :--- | :--- |
@@ -126,10 +132,10 @@ Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten 
 | Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
 | Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
 | Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
-| Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
-| Referenzen | [Extrahierter Text oder "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
+| Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
+| Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
+| Referenzen | [Extrahierter Text или "Keine Angabe"] |
 """
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
@@ -141,11 +147,4 @@ user_prompt = st.text_area(
 if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
     if not user_prompt:
         st.warning("Bitte geben Sie einen Prompt für die Analyse ein.")
-    else:
-        # Zeigt einen Lade-Spinner während der Verarbeitung
-        with st.spinner('Verarbeite Dokumente und analysiere mit Gemini 1.5 Pro...'):
-            result_text = analyze_tender(uploaded_files, user_prompt)
-
-            if result_text:
-                st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
-                st.markdown(result_text) # Zeigt die formatierte Markdown-Tabelle
+    else
