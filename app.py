@@ -91,9 +91,48 @@ uploaded_files = st.file_uploader(
 
 # 2. Prompt-Eingabefeld
 default_prompt = (
-    "Extrahieren Sie die folgenden Informationen und stellen Sie sie in einer Markdown-Tabelle dar: "
-    "1. Kurze Projektbeschreibung. 2. Erforderliche Technologien/Software. 3. Anforderungen an das Team (Anzahl und Qualifikation). "
-    "4. Arbeitsbedingungen (Remote/Vor-Ort). 5. Frist/Laufzeit des Projekts. Geben Sie für jeden Punkt die Quelle (Dateiname) an."
+    "**Rolle:**
+Du bist ein hochpräziser, streng regelbasierter KI-Assistent zur Analyse öffentlicher Ausschreibungsunterlagen. Deine Aufgabe ist es, **ausschließlich** die relevanten Daten aus den beigefügten Dokumenten zu extrahieren.
+
+**Ziel:**
+Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Ergebnis in einer einzigen, sauberen **Markdown-Tabelle**.
+
+**Zu analysierende Kriterien:**
+1. Projektbeschreibung
+2. Technologie
+3. Unternehmensgröße/Umsatz
+4. Zertifizierungen
+5. Kompetenzen Schlüsselpersonal
+6. Anzahl Schlüsselpersonal
+7. Vor-Ort/Remote
+8. Versicherungshöhe
+9. Referenzen
+
+**Wichtigste Arbeitsregeln (Anti-Halluzination):**
+1. **Quellenbasis:** Verwende **ausschließlich** die beigefügten Dokumente als einzige Informationsquelle. Verbot von Weltwissen, Mustern, Annahmen und Vermutungen.
+2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information in den Dokumenten **nicht explizit** vorhanden, mehrdeutig oder nicht direkt belegbar ist:
+   → Gib in der Tabelle **"Keine Angabe"** aus.
+3. **Klarer Widerspruch:** Wenn sich Angaben innerhalb der Dokumente widersprechen, gib **beide** Varianten an und markiere diese klar als **"Widerspruch: [Text A] vs. [Text B]"**. Triff keine Wertung oder Entscheidung.
+4. **Spezialregeln (Finanzielle/Allgemeine Kriterien):** Für Kriterien wie *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt:
+   * Gib nur **konkrete Zahlen**, **Beträge** oder **eindeutig beschriebene Projekte** aus.
+   * Allgemeine Phrasen ("langjährige Erfahrung", "zahlreiche Kunden") gelten als **"Keine Angabe"**.
+5. **Zertifizierungen:** Gib Zertifizierungen nur aus, wenn sie **wortwörtlich** genannt werden und **eindeutig dem Anbieter** zugeordnet werden müssen (nicht nur als Anforderung oder Produktmerkmal). Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
+
+**Ausgabeformat (Zwingend):**
+
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON, Code-Blöcke oder zusätzliche Erklärungen. Die Kriterien müssen genau in der oben genannten Reihenfolge erscheinen.
+
+| Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
+| :--- | :--- |
+| Projektbeschreibung | [Extrahierter Text oder "Keine Angabe"] |
+| Technologie | [Extrahierter Text oder "Keine Angabe"] |
+| Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
+| Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
+| Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
+| Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
+| Referenzen | [Extrahierter Text oder "Keine Angabe"] |"
 )
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
