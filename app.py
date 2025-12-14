@@ -5,11 +5,11 @@ import io
 # --- Konfiguration des API-Clients ---
 # Der API-Schlüssel wird sicher über die Streamlit Secrets (oder Umgebungsvariable) geladen.
 try:
-API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
-client = genai.Client(api_key=API_KEY)
+    API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=API_KEY)
 except Exception:
-st.error("Fehler bei der Initialisierung des Gemini API. Bitte prüfen Sie den 'GEMINI_API_KEY' in den Streamlit Secrets.")
-st.stop()
+    st.error("Fehler bei der Initialisierung des Gemini API. Bitte prüfen Sie den 'GEMINI_API_KEY' in den Streamlit Secrets.")
+    st.stop()
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
 """
 Lädt die Dokumente in die File API, analysiert sie mit Gemini 1.5 Pro und löscht sie.
