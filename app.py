@@ -21,27 +21,19 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien (БЕЗ TRY/EXCEPT ВОКРУГ ЦИКЛА, чтобы избежать ошибок отступа)
+   # 1. Hochladen der Dateien (Без try/except, чтобы убрать вложенность)
     for uploaded_file in files:
         try:
-            # 1. Считываем содержимое файла как байты
-            file_bytes = uploaded_file.getvalue()
-            
-            # 2. Создаем объект BytesIO
-            byte_stream = io.BytesIO(file_bytes)
-            
-            # 3. Присваиваем имя файла объекту BytesIO для определения MIME-типа
-            byte_stream.name = uploaded_file.name 
-            
-            # 4. Загружаем файл
+            # Просто передаем объект Streamlit FileUploader напрямую. 
+            # Он содержит и содержимое, и MIME-тип (.type)
             file = client.files.upload(
-                file=byte_stream
+                file=uploaded_file
             )
             
             uploaded_gemini_files.append(file)
-        
+            
         except Exception as e:
-            # Выводим ошибку, если загрузка файла не удалась
+            # Если возникла ошибка загрузки, выводим её и продолжаем
             st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {e}")
             
     
