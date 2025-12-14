@@ -32,11 +32,9 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
             # 1. Считываем содержимое файла как байты
             file_bytes = uploaded_file.getvalue()
             
-            # 2. Используем io.BytesIO, чтобы передать бинарные данные, 
-            #    и добавляем file_name, чтобы API мог определить MIME-тип.
+            # 2. Используем io.BytesIO, передавая только содержимое (самый чистый способ)
             file = client.files.upload(
-                file=io.BytesIO(file_bytes),
-                file_name=uploaded_file.name # <-- НОВОЕ ИСПРАВЛЕНИЕ
+                file=io.BytesIO(file_bytes) 
             )
             
             uploaded_gemini_files.append(file)
