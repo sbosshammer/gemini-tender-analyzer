@@ -12,14 +12,13 @@ except Exception:
     st.error("Fehler bei der Initialisierung des Gemini API. Bitte prüfen Sie den 'GEMINI_API_KEY' in den Streamlit Secrets.")
     st.stop()
 
-
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
     Lädt die Dokumente in die File API, analysiert sie mit Gemini 1.5 Pro und löscht sie.
     """
     uploaded_gemini_files = []
     
-    st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
+st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
     # 1. Hochladen der Dateien in die Gemini File API
     try:
