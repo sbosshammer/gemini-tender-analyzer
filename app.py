@@ -16,11 +16,6 @@ except Exception:
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
     Lädt die Dokumente in die File API, analysiert sie mit Gemini 1.5 Pro und löscht sie.
-    
-    :param files: Liste der hochgeladenen Streamlit-Dateiobjekte.
-    :param user_prompt: Der detaillierte Anweisungsprompt vom Benutzer.
-    :param tender_name: Name der Ausschreibung.
-    :return: Der generierte Analyse-Text von Gemini oder None bei Fehler.
     """
     uploaded_gemini_files = []
     
@@ -28,16 +23,20 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
 
     # 1. Hochladen der Dateien in die Gemini File API
     try:
+        # Цикл имеет правильные отступы
         for uploaded_file in files:
-           file_bytes = uploaded_file.getvalue()
             
-            # Создаем объект BytesIO
+            # 1. Считываем содержимое файла как байты
+            file_bytes = uploaded_file.getvalue()
+            
+            # 2. Создаем объект BytesIO
             byte_stream = io.BytesIO(file_bytes)
             
-            # **КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ:** Присваиваем имя файла объекту BytesIO.
-            # Это позволяет API автоматически определить MIME-тип.
+            # 3. КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Присваиваем имя файла объекту BytesIO, 
+            #    чтобы API мог автоматически определить MIME-тип (обход ошибки 'mime_type' / 'file_name').
             byte_stream.name = uploaded_file.name 
             
+            # 4. Загружаем файл
             file = client.files.upload(
                 file=byte_stream
             )
@@ -62,26 +61,25 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
         contents = [full_prompt] + uploaded_gemini_files
         
         response = client.models.generate_content(
-            model='gemini-1.5-pro', # Modell für den großen Kontextumfang (Context Window)
+            model='gemini-1.5-pro', # Модель для большого контекста
             contents=contents
         )
         
         return response.text
 
     except Exception as e:
-        st.error(f"Ein kritischer Fehler ist bei der Analyse aufgetreten: {e}")
+        # Улучшенное сообщение об ошибке для отладки
+        st.error(f"Ein kritischer Fehler ist bei der Analyse aufgetreten: {type(e).__name__}: {e}")
         return None
         
     finally:
-        # 3. Reinigung (KRITISCHER ISOLATIONSSCHRITT)
-        # Die hochgeladenen Dateien müssen nach der Verarbeitung gelöscht werden, 
-        # um den Kontext zu isolieren und Speicherkosten zu vermeiden.
+        # 3. Reinigung (КРИТИЧЕСКИЙ ИЗОЛЯЦИОННЫЙ ШАГ)
         st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
         for file in uploaded_gemini_files:
             try:
                 client.files.delete(name=file.name)
-            except Exception as e:
-                st.warning(f"Datei {file.name} konnte nicht gelöscht werden: {e}")
+            except Exception:
+                st.warning(f"Datei {file.name} konnte nicht gelöscht werden (Möglicherweise bereits gelöscht).")
         st.success("Bereinigung abgeschlossen. Der Kontext ist isoliert.")
 
 
@@ -97,9 +95,11 @@ uploaded_files = st.file_uploader(
 )
 
 # 2. Prompt-Eingabefeld
+# Промпт использует правильные тройные кавычки """ без внешних скобок.
 default_prompt = """
-    **Rolle:**
-Du bist ein hochpräziser, streng regelbasierter KI-Assistent zur Analyse öffentlicher Ausschreibungsunterlagen. Deine Aufgabe ist es, **ausschließlich** die relevanten Daten aus den beigefügten Dokumenten zu extrahieren.
+**Rolle:**
+Du bist ein hochpräziser, streng regelbasierter KI-Assistent zur Analyse öffentlicher Ausschreibungsunterlagen. Du arbeitest ausschließlich mit dem Inhalt der bereitgestellten Dokumente.
+Du verwendest kein Weltwissen, keine Muster, keine Branchenannahmen und keine Vermutungen.
 
 **Ziel:**
 Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Ergebnis in einer einzigen, sauberen **Markdown-Tabelle**.
@@ -116,18 +116,16 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 9. Referenzen
 
 **Wichtigste Arbeitsregeln (Anti-Halluzination):**
-1. **Quellenbasis:** Verwende **ausschließlich** die beigefügten Dokumente als einzige Informationsquelle. Verbot von Weltwissen, Mustern, Annahmen und Vermutungen.
-2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information in den Dokumenten **nicht explizit** vorhanden, mehrdeutig oder nicht direkt belegbar ist:
+1. **Quellenbasis:** Verwende **ausschließlich** die beigefügten Dokumente.
+2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information **nicht explizit** vorhanden oder belegbar ist:
    → Gib in der Tabelle **"Keine Angabe"** aus.
-3. **Klarer Widerspruch:** Wenn sich Angaben innerhalb der Dokumente widersprechen, gib **beide** Varianten an und markiere diese klar als **"Widerspruch: [Text A] vs. [Text B]"**. Triff keine Wertung oder Entscheidung.
-4. **Spezialregeln (Finanzielle/Allgemeine Kriterien):** Für Kriterien wie *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt:
-   * Gib nur **konkrete Zahlen**, **Beträge** oder **eindeutig beschriebene Projekte** aus.
-   * Allgemeine Phrasen ("langjährige Erfahrung", "zahlreiche Kunden") gelten als **"Keine Angabe"**.
-5. **Zertifizierungen:** Gib Zertifizierungen nur aus, wenn sie **wortwörtlich** genannt werden und **eindeutig dem Anbieter** zugeordnet werden müssen (nicht nur als Anforderung oder Produktmerkmal). Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
+3. **Klarer Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
+4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
+5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt und **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
 
 **Ausgabeformat (Zwingend):**
 
-Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON, Code-Blöcke oder zusätzliche Erklärungen. Die Kriterien müssen genau in der oben genannten Reihenfolge erscheinen.
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON oder Code-Blöcke.
 
 | Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
 | :--- | :--- |
@@ -158,5 +156,4 @@ if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
 
             if result_text:
                 st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
-                st.markdown(result_text) # Zeigt die formatierte Markdown-Tabelle oder JSON
-                # Die Mitarbeiter können diesen Text nun kopieren und in ihre Excel-Tabelle einfügen.
+                st.markdown(result_text) # Zeigt die formatierte Markdown-Tabelle
