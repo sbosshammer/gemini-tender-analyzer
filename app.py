@@ -29,10 +29,16 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     # 1. Hochladen der Dateien in die Gemini File API
     try:
         for uploaded_file in files:
-            # Inhalt der Datei lesen und hochladen
+            # 1. Считываем содержимое файла как байты
+            file_bytes = uploaded_file.getvalue()
+            
+            # 2. Используем io.BytesIO, чтобы передать бинарные данные, 
+            #    и добавляем file_name, чтобы API мог определить MIME-тип.
             file = client.files.upload(
-                file=uploaded_file
+                file=io.BytesIO(file_bytes),
+                file_name=uploaded_file.name # <-- НОВОЕ ИСПРАВЛЕНИЕ
             )
+            
             uploaded_gemini_files.append(file)
             
         st.success(f"✅ Dateien erfolgreich hochgeladen. Die Analyse beginnt...")
