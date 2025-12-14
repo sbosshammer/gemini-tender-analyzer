@@ -30,10 +30,8 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     try:
         for uploaded_file in files:
             # Inhalt der Datei lesen und hochladen
-            file_bytes = uploaded_file.getvalue()
             file = client.files.upload(
-                file=io.BytesIO(file_bytes),
-                mime_type=uploaded_file.type
+                file=uploaded_file
             )
             uploaded_gemini_files.append(file)
             
