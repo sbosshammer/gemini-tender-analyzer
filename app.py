@@ -3,7 +3,8 @@ from google import genai
 import os
 import io
 
-# --- Конфигурация API (Без try/except) ---
+# --- Konfiguration des API-Clients ---
+# Единственный блок try/except, который должен быть.
 try:
     API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
@@ -20,27 +21,37 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien (Без try/except, чтобы убрать вложенность)
+    # 1. Hochladen der Dateien (БЕЗ TRY/EXCEPT ВОКРУГ ЦИКЛА, чтобы избежать ошибок отступа)
     for uploaded_file in files:
-        # 1. Считываем содержимое файла как байты
-        file_bytes = uploaded_file.getvalue()
+        try:
+            # 1. Считываем содержимое файла как байты
+            file_bytes = uploaded_file.getvalue()
+            
+            # 2. Создаем объект BytesIO
+            byte_stream = io.BytesIO(file_bytes)
+            
+            # 3. Присваиваем имя файла объекту BytesIO для определения MIME-типа
+            byte_stream.name = uploaded_file.name 
+            
+            # 4. Загружаем файл
+            file = client.files.upload(
+                file=byte_stream
+            )
+            
+            uploaded_gemini_files.append(file)
         
-        # 2. Создаем объект BytesIO
-        byte_stream = io.BytesIO(file_bytes)
-        
-        # 3. Присваиваем имя файла объекту BytesIO для определения MIME-типа
-        byte_stream.name = uploaded_file.name 
-        
-        # 4. Загружаем файл
-        file = client.files.upload(
-            file=byte_stream
-        )
-        
-        uploaded_gemini_files.append(file)
+        except Exception as e:
+            # Выводим ошибку, если загрузка файла не удалась
+            st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {e}")
+            
+    
+    if not uploaded_gemini_files:
+        st.error("Keine Dateien konnten erfolgreich hochgeladen werden. Die Analyse wird abgebrochen.")
+        return None
         
     st.success(f"✅ Dateien erfolgreich hochgeladen. Die Analyse beginnt...")
 
-    # 2. Prompterstellung und анализ
+    # 2. Prompterstellung und Analyse
     full_prompt = f"""
 AUSSCHREIBUNG: {tender_name}
 
@@ -61,13 +72,12 @@ Wichtig:
     
     result_text = response.text
 
-    # 3. Очистка (Без try/finally, но с защитой)
+    # 3. Очистка (БЕЗ FINALLY, но с защитой от ошибок)
     st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
     for file in uploaded_gemini_files:
         try:
             client.files.delete(name=file.name)
         except Exception:
-            # Предупреждение, но не остановка работы
             st.warning(f"Datei {file.name} konnte nicht gelöscht werden (Möglicherweise bereits gelöscht).")
     st.success("Bereinigung abgeschlossen. Der Kontext ist isoliert.")
 
@@ -115,7 +125,7 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 
 **Ausgabeformat (Zwingend):**
 
-Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON oder Code-Blöcke.
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium и Ergebnis), **ohne** JSON или Code-Blöcke.
 
 | Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
 | :--- | :--- |
@@ -124,10 +134,10 @@ Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten 
 | Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
 | Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
 | Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
-| Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
-| Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
-| Referenzen | [Extrahierter Text или "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
+| Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
+| Referenzen | [Extrahierter Text oder "Keine Angabe"] |
 """
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
