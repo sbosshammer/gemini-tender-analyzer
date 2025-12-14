@@ -3,8 +3,7 @@ from google import genai
 import os
 import io
 
-# --- Konfiguration des API-Clients ---
-# Der API-Schlüssel wird sicher über die Streamlit Secrets (oder Umgebungsvariable) geladen.
+# --- Конфигурация API (Без try/except) ---
 try:
     API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
@@ -21,27 +20,28 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien in die Gemini File API
-    try:
-        for uploaded_file in files:
-            
-            file_bytes = uploaded_file.getvalue()
-            
-            byte_stream = io.BytesIO(file_bytes)
-            
-            # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Присваиваем имя файла объекту BytesIO
-            byte_stream.name = uploaded_file.name 
-            
-            file = client.files.upload(
-                file=byte_stream
-            )
-            
-            uploaded_gemini_files.append(file)
-            
-        st.success(f"✅ Dateien erfolgreich hochgeladen. Die Analyse beginnt...")
+    # 1. Hochladen der Dateien (Без try/except, чтобы убрать вложенность)
+    for uploaded_file in files:
+        # 1. Считываем содержимое файла как байты
+        file_bytes = uploaded_file.getvalue()
+        
+        # 2. Создаем объект BytesIO
+        byte_stream = io.BytesIO(file_bytes)
+        
+        # 3. Присваиваем имя файла объекту BytesIO для определения MIME-типа
+        byte_stream.name = uploaded_file.name 
+        
+        # 4. Загружаем файл
+        file = client.files.upload(
+            file=byte_stream
+        )
+        
+        uploaded_gemini_files.append(file)
+        
+    st.success(f"✅ Dateien erfolgreich hochgeladen. Die Analyse beginnt...")
 
-        # 2. Prompterstellung und Analyse
-        full_prompt = f"""
+    # 2. Prompterstellung und анализ
+    full_prompt = f"""
 AUSSCHREIBUNG: {tender_name}
 
 Bitte analysieren Sie ALLE beigefügten Dokumente dieser Ausschreibung. 
@@ -51,29 +51,27 @@ Wichtig:
 1. Verwenden Sie NUR die hochgeladenen Dokumente als Quelle.
 2. Extrahieren Sie nur präzise Daten und zitieren Sie bei Fakten die Quelle (Dateiname oder Dokumenttitel).
 """
-        
-        content = [full_prompt] + uploaded_gemini_files
-        
-        response = client.models.generate_content(
-            model='gemini-1.5-pro', 
-            contents=content
-        )
-        
-        return response.text
+    
+    content = [full_prompt] + uploaded_gemini_files
+    
+    response = client.models.generate_content(
+        model='gemini-1.5-pro', 
+        contents=content
+    )
+    
+    result_text = response.text
 
-    except Exception as e:
-        st.error(f"Ein kritischer Fehler ist bei der Analyse aufgetreten: {type(e).__name__}: {e}")
-        return None
-        
-    finally:
-        # 3. Reinigung (КРИТИЧЕСКИЙ ИЗОЛЯЦИОННЫЙ ШАГ)
-        st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
-        for file in uploaded_gemini_files:
-            try:
-                client.files.delete(name=file.name)
-            except Exception:
-                st.warning(f"Datei {file.name} konnte nicht gelöscht werden (Möglicherweise bereits gelöscht).")
-        st.success("Bereinigung abgeschlossen. Der Kontext ist isoliert.")
+    # 3. Очистка (Без try/finally, но с защитой)
+    st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
+    for file in uploaded_gemini_files:
+        try:
+            client.files.delete(name=file.name)
+        except Exception:
+            # Предупреждение, но не остановка работы
+            st.warning(f"Datei {file.name} konnte nicht gelöscht werden (Möglicherweise bereits gelöscht).")
+    st.success("Bereinigung abgeschlossen. Der Kontext ist isoliert.")
+
+    return result_text
 
 
 # --- STREAMLIT BENUTZEROBERFLÄCHE (UI) ---
@@ -126,10 +124,10 @@ Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten 
 | Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
 | Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
 | Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
-| Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
-| Referenzen | [Extrahierter Text oder "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
+| Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
+| Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
+| Referenzen | [Extrahierter Text или "Keine Angabe"] |
 """
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
