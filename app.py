@@ -23,20 +23,17 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
 
     # 1. Hochladen der Dateien in die Gemini File API
     try:
-        # Цикл имеет правильные отступы
+        # Цикл имеет правильные отступы (4 пробела)
         for uploaded_file in files:
             
-            # 1. Считываем содержимое файла как байты
+            # Внутри цикла отступы 8 пробелов
             file_bytes = uploaded_file.getvalue()
             
-            # 2. Создаем объект BytesIO
             byte_stream = io.BytesIO(file_bytes)
             
-            # 3. КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Присваиваем имя файла объекту BytesIO, 
-            #    чтобы API мог автоматически определить MIME-тип (обход ошибки 'mime_type' / 'file_name').
+            # Присваиваем имя файла объекту BytesIO для определения MIME-типа
             byte_stream.name = uploaded_file.name 
             
-            # 4. Загружаем файл
             file = client.files.upload(
                 file=byte_stream
             )
@@ -57,12 +54,11 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
         2. Extrahieren Sie nur präzise Daten und zitieren Sie bei Fakten die Quelle (Dateiname oder Dokumenttitel).
         """
         
-        # Inhalt für die API: Prompt-Text gefolgt von den Dateiobjekten
-        contents = [full_prompt] + uploaded_gemini_files
+        content = [full_prompt] + uploaded_gemini_files
         
         response = client.models.generate_content(
-            model='gemini-1.5-pro', # Модель для большого контекста
-            contents=contents
+            model='gemini-1.5-pro', 
+            contents=content
         )
         
         return response.text
@@ -75,6 +71,7 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     finally:
         # 3. Reinigung (КРИТИЧЕСКИЙ ИЗОЛЯЦИОННЫЙ ШАГ)
         st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
+        # Цикл имеет правильные отступы
         for file in uploaded_gemini_files:
             try:
                 client.files.delete(name=file.name)
@@ -95,7 +92,6 @@ uploaded_files = st.file_uploader(
 )
 
 # 2. Prompt-Eingabefeld
-# Промпт использует правильные тройные кавычки """ без внешних скобок.
 default_prompt = """
 **Rolle:**
 Du bist ein hochpräziser, streng regelbasierter KI-Assistent zur Analyse öffentlicher Ausschreibungsunterlagen. Du arbeitest ausschließlich mit dem Inhalt der bereitgestellten Dokumente.
