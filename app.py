@@ -2,7 +2,11 @@ import streamlit as st
 from google import genai
 import os
 import io
-import tempfile # <--- НОВЫЙ ИМПОРТ
+import tempfile 
+
+# --- Инициализация состояния сессии Streamlit (НОВОЕ) ---
+if 'analysis_results' not in st.session_state:
+    st.session_state.analysis_results = []
 
 # --- Konfiguration des API-Clients ---
 # Единственный блок try/except для инициализации API
@@ -14,13 +18,56 @@ except Exception:
     st.stop()
 
 
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ФИНАЛЬНОГО ОБОБЩЕНИЯ (ZUSAMMENFASSUNG) ---
+def summarize_results(client, results):
+    """
+    Объединяет все текстовые результаты анализа и запрашивает у Gemini финальное обобщение.
+    """
+    if not results:
+        return "Нет сохраненных результатов для обобщения."
+
+    # Объединяем все сохраненные таблицы в один большой текстовый промт
+    all_results_text = "\n\n--- ДОКУМЕНТ СЛЕДУЕТ ---\n\n".join(results)
+    
+    # Промпт для финальной консолидации
+    consolidation_prompt = f"""
+    Высокоточный ассистент, пожалуйста, проанализируйте и объедините результаты, полученные из нескольких документов тендера.
+    
+    Ваша задача:
+    1. Объедините все данные из таблиц ниже в **ОДНУ финальную таблицу в формате Markdown**.
+    2. Устраните дублирование.
+    3. Если информация конфликтует, укажите обе версии или выберите наиболее полную.
+    4. Сохраните то же количество столбцов (Kriterium и Ergebnis).
+
+    Вот все результаты:
+    
+    {all_results_text}
+    """
+
+    st.info("Отправка всех результатов для финальной консолидации...")
+    
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=consolidation_prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"Критическая ошибка при обобщении: {type(e).__name__}: {e}"
+
+
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
     Lädt die Dokumente, сохраняя их локально для правильного определения MIME-типа,
-    анализирует их с Gemini 1.5 Pro и затем удаляет.
+    анализирует их с Gemini 2.5 Flash и затем удаляет.
     """
     uploaded_gemini_files = []
     
+    # Дополнительная проверка, что клиент существует
+    if 'client' not in globals():
+        st.error("API-Client wurde nicht initialisiert. Bitte prüfen Sie Ihren API-Schlüssel.")
+        return None
+
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
     # 1. Hochladen der Dateien (Метод временного файла для обхода ошибки MIME-типа)
@@ -28,7 +75,6 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
         temp_file = None
         try:
             # 1. Создание временного файла с правильным расширением
-            # Используется для того, чтобы Python мог сам определить MIME-тип по расширению
             ext = uploaded_file.name.split('.')[-1]
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}')
             
@@ -37,7 +83,6 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
             temp_file.close()
             
             # 3. Загрузка файла в Gemini API по пути к файлу
-            # Этот метод позволяет библиотеке Python автоматически определить MIME-тип
             file = client.files.upload(
                 file=temp_file.name
             )
@@ -126,10 +171,10 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 **Wichtigste Arbeitsregeln (Anti-Halluzination):**
 1. **Quellenbasis:** Verwende **ausschließlich** die beigefügten Dokumente.
 2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information **nicht explizit** vorhanden oder belegbar ist:
-   → Gib in der Tabelle **"Keine Angabe"** aus.
-3. **Клар Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
-4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
-5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt und **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
+    → Gib in der Tabelle **"Keine Angabe"** aus.
+3. **Klarer Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
+4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* и *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
+5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt и **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
 
 **Ausgabeformat (Zwingend):**
 
@@ -153,15 +198,44 @@ user_prompt = st.text_area(
     height=200
 )
 
-# 3. Analyse-Button
+# 3. Analyse-Button (ИЗМЕНЕН)
 if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
     if not user_prompt:
         st.warning("Bitte geben Sie einen Prompt für die Analyse ein.")
     else:
-        # Zeigt einen Lade-Spinner während der Verarbeitung
-        with st.spinner('Verarbeite Dokumente und analysiere mit Gemini 1.5 Pro...'):
-            result_text = analyze_tender(uploaded_files, user_prompt)
+        # Дополнительная проверка на один файл
+        if len(uploaded_files) > 1:
+            st.error("Пожалуйста, загружайте только один документ для анализа за раз из-за ограничений контекстного окна API.")
+        else:
+            # Zeigt einen Lade-Spinner während der Verarbeitung
+            with st.spinner('Verarbeite Dokumente und analysiere mit Gemini 2.5 Flash...'):
+                result_text = analyze_tender(uploaded_files, user_prompt)
 
-            if result_text:
-                st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
-                st.markdown(result_text) # Zeigt die formatierte Markdown-Tabelle
+                if result_text:
+                    # Сохраняем результат анализа в состоянии сессии (НОВОЕ)
+                    st.session_state.analysis_results.append(result_text) 
+                    
+                    st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
+                    st.markdown(result_text)
+                    st.success(f"Результат успешно сохранен. Всего результатов: {len(st.session_state.analysis_results)}")
+
+
+# --- 4. ФИНАЛЬНОЕ ОБОБЩЕНИЕ (ZUSAMMENFASSUNG) --- (НОВОЕ)
+
+if st.session_state.analysis_results:
+    st.markdown("---")
+    st.subheader(f"🔄 Собрано результатов: {len(st.session_state.analysis_results)} (для объединения)")
+    
+    if st.button("⭐ 4. Сделать финальное обобщение (Zusammenfassung)"):
+        with st.spinner('Объединение всех результатов в одну финальную таблицу...'):
+            # Передаем client, который мы инициализировали в начале
+            final_summary = summarize_results(client, st.session_state.analysis_results)
+            
+            st.subheader("✅ Финальный консолидированный отчет:")
+            st.markdown(final_summary)
+            
+            # Дополнительная кнопка для очистки состояния
+            st.markdown("---")
+            if st.button("Очистить все результаты и начать заново"):
+                st.session_state.analysis_results = []
+                st.rerun() # Перезапуск приложения для сброса состояния
