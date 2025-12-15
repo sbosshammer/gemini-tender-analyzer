@@ -3,22 +3,22 @@ from google import genai
 import os
 import io
 import tempfile 
-import time # Добавляем для безопасности, но не обязательно использовать
+import time # Hinzugefügt für die Sicherheit, aber nicht zwingend genutzt
 
-# --- Инициализация состояния сессии Streamlit ---
-# Используется для хранения результатов анализа и для сброса поля загрузки файлов
+# --- Initialisierung des Streamlit Session State (Sitzungsstatus) ---
+# Wird zur Speicherung der Analyseergebnisse und zum Zurücksetzen des Upload-Feldes verwendet
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = []
 if 'file_uploader_key' not in st.session_state:
     st.session_state.file_uploader_key = 0
 
-# --- Функции очистки ---
+# --- Bereinigungsfunktionen ---
 def clear_file_uploader():
-    """Сбрасывает ключ поля загрузки файлов, принудительно очищая его UI."""
+    """Setzt den Schlüssel des Datei-Upload-Feldes zurück, wodurch das UI zwangsweise geleert wird."""
     st.session_state["file_uploader_key"] += 1
 
 # --- Konfiguration des API-Clients ---
-# Единственный блок try/except для инициализации API
+# Der einzige try/except-Block für die API-Initialisierung
 try:
     API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
@@ -27,33 +27,33 @@ except Exception:
     st.stop()
 
 
-# --- ФУНКЦИЯ ДЛЯ ФИНАЛЬНОГО ОБОБЩЕНИЯ (ZUSAMMENFASSUNG) ---
+# --- FUNKTION ZUR FINALEN ZUSAMMENFASSUNG ---
 def summarize_results(client, results):
     """
-    Объединяет все текстовые результаты анализа и запрашивает у Gemini финальное обобщение.
+    Fasst alle textuellen Analyseergebnisse zusammen und fordert Gemini zur finalen Konsolidierung auf.
     """
     if not results:
-        return "Нет сохраненных результатов для обобщения."
+        return "Keine gespeicherten Ergebnisse zur Zusammenfassung vorhanden."
 
-    # Объединяем все сохраненные таблицы в один большой текстовый промт
-    all_results_text = "\n\n--- ДОКУМЕНТ СЛЕДУЕТ ---\n\n".join(results)
+    # Fassen alle gespeicherten Tabellen in einem großen Text-Prompt zusammen
+    all_results_text = "\n\n--- NÄCHSTES DOKUMENT FOLGT ---\n\n".join(results)
     
-    # Промпт для финальной консолидации
+    # Prompt für die finale Konsolidierung
     consolidation_prompt = f"""
-    Высокоточный ассистент, пожалуйста, проанализируйте и объедините результаты, полученные из нескольких документов тендера.
+    Hochpräziser Assistent, bitte analysieren und konsolidieren Sie die Ergebnisse, die aus mehreren Ausschreibungsdokumenten stammen.
     
-    Ваша задача:
-    1. Объедините все данные из таблиц ниже в **ОДНУ финальную таблицу в формате Markdown**.
-    2. Устраните дублирование.
-    3. Если информация конфликтует, укажите обе версии или выберите наиболее полную.
-    4. Сохраните то же количество столбцов (Kriterium и Ergebnis).
+    Ihre Aufgabe:
+    1. Fassen Sie alle Daten aus den unten stehenden Tabellen in **EINE finale Markdown-Tabelle** zusammen.
+    2. Beseitigen Sie Duplikate.
+    3. Bei widersprüchlichen Informationen geben Sie beide Versionen an oder wählen die vollständigere aus.
+    4. Behalten Sie die gleiche Anzahl von Spalten bei (Kriterium und Ergebnis).
 
-    Вот все результаты:
+    Hier sind alle Ergebnisse:
     
     {all_results_text}
     """
 
-    st.info("Отправка всех результатов для финальной консолидации...")
+    st.info("Sende alle Ergebnisse zur finalen Konsolidierung...")
     
     try:
         response = client.models.generate_content(
@@ -62,36 +62,36 @@ def summarize_results(client, results):
         )
         return response.text
     except Exception as e:
-        return f"Критическая ошибка при обобщении: {type(e).__name__}: {e}"
+        return f"Kritischer Fehler bei der Zusammenfassung: {type(e).__name__}: {e}"
 
 
-# --- ФУНКЦИЯ АНАЛИЗА ОДНОГО ДОКУМЕНТА ---
+# --- FUNKTION ZUR ANALYSE EINES EINZELNEN DOKUMENTS ---
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
-    Анализирует ОДИН документ.
+    Analysiert EIN Dokument.
     """
     uploaded_gemini_files = []
     
-    # Дополнительная проверка, что клиент существует
+    # Zusätzliche Prüfung, ob der Client existiert
     if 'client' not in globals():
         st.error("API-Client wurde nicht initialisiert. Bitte prüfen Sie Ihren API-Schlüssel.")
         return None
 
-    st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
+    st.info(f"Lade {len(files)} Dokument(e) in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien (Метод временного файла)
-    for uploaded_file in files: # В цикле будет только один файл
+    # 1. Hochladen der Dateien (Temporäre Datei-Methode)
+    for uploaded_file in files: # Im Zyklus wird nur eine Datei sein
         temp_file = None
         try:
-            # 1. Создание временного файла с правильным расширением
+            # 1. Erstellung einer temporären Datei mit der korrekten Endung
             ext = uploaded_file.name.split('.')[-1]
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}')
             
-            # 2. Запись содержимого Streamlit-файла во временный файл
+            # 2. Schreiben des Inhalts der Streamlit-Datei in die temporäre Datei
             temp_file.write(uploaded_file.getvalue())
             temp_file.close()
             
-            # 3. Загрузка файла в Gemini API по пути к файлу
+            # 3. Hochladen der Datei in die Gemini API über den Dateipfad
             file = client.files.upload(
                 file=temp_file.name
             )
@@ -102,7 +102,7 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
             st.error(f"Fehler beim Hochladen der Datei '{uploaded_file.name}': {type(e).__name__}: {e}")
         
         finally:
-            # 4. Очистка временного локального файла
+            # 4. Bereinigung der temporären lokalen Datei
             if temp_file and os.path.exists(temp_file.name):
                 os.unlink(temp_file.name)
             
@@ -113,7 +113,7 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
         
     st.success(f"✅ Datei '{files[0].name}' erfolgreich hochgeladen. Die Analyse beginnt...")
 
-    # 2. Prompterstellung und Analyse
+    # 2. Prompt-Erstellung und Analyse
     full_prompt = f"""
 AUSSCHREIBUNG: {tender_name}
 
@@ -134,7 +134,7 @@ Wichtig:
     
     result_text = response.text
 
-    # 3. Очистка
+    # 3. Bereinigung (Löschen der temporären Dateien aus der Cloud)
     st.info("Starte die Bereinigung (Löschen der temporären Dateien aus der Cloud)...")
     for file in uploaded_gemini_files:
         try:
@@ -155,7 +155,7 @@ st.caption("Laden Sie alle Dokumente EINER Ausschreibung hoch, geben Sie Ihren P
 uploaded_files = st.file_uploader(
     "1. Laden Sie EIN Dokument der Ausschreibung hoch (Word, PDF, Excel usw.)",
     accept_multiple_files=True,
-    key=st.session_state.file_uploader_key # Привязка к ключу для сброса
+    key=st.session_state.file_uploader_key # Anbindung an den Schlüssel zum Zurücksetzen
 )
 
 # 2. Prompt-Eingabefeld
@@ -184,23 +184,23 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
     → Gib in der Tabelle **"Keine Angabe"** aus.
 3. **Klarer Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
 4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
-5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt и **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
+5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt und **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
 
 **Ausgabeformat (Zwingend):**
 
-Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium и Ergebnis), **ohne** JSON или Code-Blöcke.
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON oder Code-Blöcke.
 
 | Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
 | :--- | :--- |
 | Projektbeschreibung | [Extrahierter Text oder "Keine Angabe"] |
 | Technologie | [Extrahierter Text oder "Keine Angabe"] |
-| Unternehmensgröße/Umsatz | [Extrahierter Text или "Keine Angabe"] |
-| Zertifizierungen | [Extrahierter Text или "Keine Angabe (unklare Zuordnung)"] |
-| Kompetenzen Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
-| Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
-| Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
-| Referenzen | [Extrahierter Text или "Keine Angabe"] |
+| Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
+| Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
+| Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Vor-Ort/Remote | [Extrahierter Text oder "Keine Angabe"] |
+| Versicherungshöhe | [Extrahierter Text oder "Keine Angabe"] |
+| Referenzen | [Extrahierter Text oder "Keine Angabe"] |
 """
 user_prompt = st.text_area(
     "2. Ihr Prompt (Anweisungs-Template):", 
@@ -212,43 +212,44 @@ user_prompt = st.text_area(
 if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
     if not user_prompt:
         st.warning("Bitte geben Sie einen Prompt für die Analyse ein.")
-    # Принудительная проверка на один файл
+    # Obligatorische Prüfung auf nur eine Datei
     elif len(uploaded_files) > 1: 
-        st.error("Пожалуйста, загружайте только один документ для анализа за раз из-за ограничений контекстного окна API.")
+        st.error("Bitte laden Sie nur EIN Dokument zur Analyse pro Durchgang hoch, aufgrund der API-Kontextfenster-Einschränkungen.")
     else:
         # Zeigt einen Lade-Spinner während der Verarbeitung
         with st.spinner('Verarbeite Dokument und analysiere mit Gemini 2.5 Flash...'):
             result_text = analyze_tender(uploaded_files, user_prompt)
 
             if result_text:
-                # Сохраняем результат анализа в состоянии сессии
+                # Speichern des Analyseergebnisses im Sitzungsstatus
                 st.session_state.analysis_results.append(result_text) 
                 
                 st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
                 st.markdown(result_text)
-                st.success(f"Результат сохранен. Всего результатов: {len(st.session_state.analysis_results)}")
+                st.success(f"Ergebnis gespeichert. Gesamtzahl der Ergebnisse: {len(st.session_state.analysis_results)}")
                 
-                # Кнопка для очистки поля загрузки после успешного анализа
-                if st.button("Загрузить следующий документ"):
+                # Schaltfläche zum Leeren des Upload-Feldes nach erfolgreicher Analyse
+                if st.button("Nächstes Dokument hochladen"):
                     clear_file_uploader()
                     st.rerun()
 
-# --- 4. ФИНАЛЬНОЕ ОБОБЩЕНИЕ (ZUSAMMENFASSUNG) ---
+# --- 4. FINALE ZUSAMMENFASSUNG ---
 
 if st.session_state.analysis_results:
     st.markdown("---")
-    st.subheader(f"🔄 Собрано результатов: {len(st.session_state.analysis_results)} (для объединения)")
+    st.subheader(f"🔄 Gesammelte Ergebnisse: {len(st.session_state.analysis_results)} (zur Konsolidierung)")
     
-    if st.button("⭐ 4. Сделать финальное обобщение (Zusammenfassung)"):
-        with st.spinner('Объединение всех результатов в одну финальную таблицу...'):
+    if st.button("⭐ 4. Finale Zusammenfassung erstellen"):
+        with st.spinner('Fasse alle Ergebnisse in einer finalen Tabelle zusammen...'):
+            # Übergabe des Clients, der zu Beginn initialisiert wurde
             final_summary = summarize_results(client, st.session_state.analysis_results)
             
-            st.subheader("✅ Финальный консолидированный отчет:")
+            st.subheader("✅ Finaler konsolidierter Bericht:")
             st.markdown(final_summary)
             
-            # Дополнительная кнопка для очистки состояния
+            # Zusätzliche Schaltfläche zum Zurücksetzen des Zustands
             st.markdown("---")
-            if st.button("Очистить все результаты и начать заново"):
+            if st.button("Alle Ergebnisse löschen und neu starten"):
                 st.session_state.analysis_results = []
                 clear_file_uploader()
                 st.rerun()
