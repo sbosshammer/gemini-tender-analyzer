@@ -3,10 +3,19 @@ from google import genai
 import os
 import io
 import tempfile 
+import time # Добавляем для безопасности, но не обязательно использовать
 
-# --- Инициализация состояния сессии Streamlit (НОВОЕ) ---
+# --- Инициализация состояния сессии Streamlit ---
+# Используется для хранения результатов анализа и для сброса поля загрузки файлов
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = []
+if 'file_uploader_key' not in st.session_state:
+    st.session_state.file_uploader_key = 0
+
+# --- Функции очистки ---
+def clear_file_uploader():
+    """Сбрасывает ключ поля загрузки файлов, принудительно очищая его UI."""
+    st.session_state["file_uploader_key"] += 1
 
 # --- Konfiguration des API-Clients ---
 # Единственный блок try/except для инициализации API
@@ -18,7 +27,7 @@ except Exception:
     st.stop()
 
 
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ ФИНАЛЬНОГО ОБОБЩЕНИЯ (ZUSAMMENFASSUNG) ---
+# --- ФУНКЦИЯ ДЛЯ ФИНАЛЬНОГО ОБОБЩЕНИЯ (ZUSAMMENFASSUNG) ---
 def summarize_results(client, results):
     """
     Объединяет все текстовые результаты анализа и запрашивает у Gemini финальное обобщение.
@@ -56,10 +65,10 @@ def summarize_results(client, results):
         return f"Критическая ошибка при обобщении: {type(e).__name__}: {e}"
 
 
+# --- ФУНКЦИЯ АНАЛИЗА ОДНОГО ДОКУМЕНТА ---
 def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
     """
-    Lädt die Dokumente, сохраняя их локально для правильного определения MIME-типа,
-    анализирует их с Gemini 2.5 Flash и затем удаляет.
+    Анализирует ОДИН документ.
     """
     uploaded_gemini_files = []
     
@@ -70,8 +79,8 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
 
     st.info(f"Lade {len(files)} Dokumente in die Gemini File API hoch...")
 
-    # 1. Hochladen der Dateien (Метод временного файла для обхода ошибки MIME-типа)
-    for uploaded_file in files:
+    # 1. Hochladen der Dateien (Метод временного файла)
+    for uploaded_file in files: # В цикле будет только один файл
         temp_file = None
         try:
             # 1. Создание временного файла с правильным расширением
@@ -102,7 +111,7 @@ def analyze_tender(files, user_prompt, tender_name="Aktuelle Ausschreibung"):
         st.error("Keine Dateien konnten erfolgreich hochgeladen werden. Die Analyse wird abgebrochen.")
         return None
         
-    st.success(f"✅ Dateien erfolgreich hochgeladen. Die Analyse beginnt...")
+    st.success(f"✅ Datei '{files[0].name}' erfolgreich hochgeladen. Die Analyse beginnt...")
 
     # 2. Prompterstellung und Analyse
     full_prompt = f"""
@@ -144,8 +153,9 @@ st.caption("Laden Sie alle Dokumente EINER Ausschreibung hoch, geben Sie Ihren P
 
 # 1. Dateiupload-Feld
 uploaded_files = st.file_uploader(
-    "1. Laden Sie alle Dokumente der Ausschreibung hoch (Word, PDF, Excel usw.)",
-    accept_multiple_files=True
+    "1. Laden Sie EIN Dokument der Ausschreibung hoch (Word, PDF, Excel usw.)",
+    accept_multiple_files=True,
+    key=st.session_state.file_uploader_key # Привязка к ключу для сброса
 )
 
 # 2. Prompt-Eingabefeld
@@ -173,21 +183,21 @@ Extrahiere die Inhalte zu den unten genannten Kriterien und präsentiere das Erg
 2. **Standard-Ausgabe bei Fehlen:** Wenn eine Information **nicht explizit** vorhanden oder belegbar ist:
     → Gib in der Tabelle **"Keine Angabe"** aus.
 3. **Klarer Widerspruch:** Wenn sich Angaben widersprechen, gib **beide** Varianten an und markiere als **"Widerspruch"**. Triff keine Entscheidung.
-4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* и *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
+4. **Spezialregeln:** Für *Unternehmensgröße/Umsatz*, *Versicherungshöhe* und *Referenzen* gilt: Nur **konkrete Zahlen/Beträge/Projekte** ausgeben. Allgemeine Phrasen führen zu **"Keine Angabe"**.
 5. **Zertifizierungen:** Nur ausgeben, wenn **wortwörtlich** genannt и **eindeutig dem Anbieter zuordenbar**. Bei Unklarheit: **"Keine Angabe (unklare Zuordnung)"**.
 
 **Ausgabeformat (Zwingend):**
 
-Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium und Ergebnis), **ohne** JSON или Code-Blöcke.
+Du musst das Ergebnis in einer einzigen Markdown-Tabelle mit exakt zwei Spalten zurückgeben (Kriterium и Ergebnis), **ohne** JSON или Code-Blöcke.
 
 | Kriterium | Ergebnis (Dokumentnahe Wiedergabe) |
 | :--- | :--- |
 | Projektbeschreibung | [Extrahierter Text oder "Keine Angabe"] |
 | Technologie | [Extrahierter Text oder "Keine Angabe"] |
-| Unternehmensgröße/Umsatz | [Extrahierter Text oder "Keine Angabe"] |
-| Zertifizierungen | [Extrahierter Text oder "Keine Angabe (unklare Zuordnung)"] |
-| Kompetenzen Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
-| Anzahl Schlüsselpersonal | [Extrahierter Text oder "Keine Angabe"] |
+| Unternehmensgröße/Umsatz | [Extrahierter Text или "Keine Angabe"] |
+| Zertifizierungen | [Extrahierter Text или "Keine Angabe (unklare Zuordnung)"] |
+| Kompetenzen Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
+| Anzahl Schlüsselpersonal | [Extrahierter Text или "Keine Angabe"] |
 | Vor-Ort/Remote | [Extrahierter Text или "Keine Angabe"] |
 | Versicherungshöhe | [Extrahierter Text или "Keine Angabe"] |
 | Referenzen | [Extrahierter Text или "Keine Angabe"] |
@@ -198,29 +208,32 @@ user_prompt = st.text_area(
     height=200
 )
 
-# 3. Analyse-Button (ИЗМЕНЕН)
+# 3. Analyse-Button
 if uploaded_files and st.button("🚀 3. Analyse der Ausschreibung starten"):
     if not user_prompt:
         st.warning("Bitte geben Sie einen Prompt für die Analyse ein.")
+    # Принудительная проверка на один файл
+    elif len(uploaded_files) > 1: 
+        st.error("Пожалуйста, загружайте только один документ для анализа за раз из-за ограничений контекстного окна API.")
     else:
-        # Дополнительная проверка на один файл
-        if len(uploaded_files) > 1:
-            st.error("Пожалуйста, загружайте только один документ для анализа за раз из-за ограничений контекстного окна API.")
-        else:
-            # Zeigt einen Lade-Spinner während der Verarbeitung
-            with st.spinner('Verarbeite Dokumente und analysiere mit Gemini 2.5 Flash...'):
-                result_text = analyze_tender(uploaded_files, user_prompt)
+        # Zeigt einen Lade-Spinner während der Verarbeitung
+        with st.spinner('Verarbeite Dokument und analysiere mit Gemini 2.5 Flash...'):
+            result_text = analyze_tender(uploaded_files, user_prompt)
 
-                if result_text:
-                    # Сохраняем результат анализа в состоянии сессии (НОВОЕ)
-                    st.session_state.analysis_results.append(result_text) 
-                    
-                    st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
-                    st.markdown(result_text)
-                    st.success(f"Результат успешно сохранен. Всего результатов: {len(st.session_state.analysis_results)}")
+            if result_text:
+                # Сохраняем результат анализа в состоянии сессии
+                st.session_state.analysis_results.append(result_text) 
+                
+                st.subheader("✅ Analyse-Ergebnis (Zum Kopieren bereit):")
+                st.markdown(result_text)
+                st.success(f"Результат сохранен. Всего результатов: {len(st.session_state.analysis_results)}")
+                
+                # Кнопка для очистки поля загрузки после успешного анализа
+                if st.button("Загрузить следующий документ"):
+                    clear_file_uploader()
+                    st.rerun()
 
-
-# --- 4. ФИНАЛЬНОЕ ОБОБЩЕНИЕ (ZUSAMMENFASSUNG) --- (НОВОЕ)
+# --- 4. ФИНАЛЬНОЕ ОБОБЩЕНИЕ (ZUSAMMENFASSUNG) ---
 
 if st.session_state.analysis_results:
     st.markdown("---")
@@ -228,7 +241,6 @@ if st.session_state.analysis_results:
     
     if st.button("⭐ 4. Сделать финальное обобщение (Zusammenfassung)"):
         with st.spinner('Объединение всех результатов в одну финальную таблицу...'):
-            # Передаем client, который мы инициализировали в начале
             final_summary = summarize_results(client, st.session_state.analysis_results)
             
             st.subheader("✅ Финальный консолидированный отчет:")
@@ -238,4 +250,5 @@ if st.session_state.analysis_results:
             st.markdown("---")
             if st.button("Очистить все результаты и начать заново"):
                 st.session_state.analysis_results = []
-                st.rerun() # Перезапуск приложения для сброса состояния
+                clear_file_uploader()
+                st.rerun()
